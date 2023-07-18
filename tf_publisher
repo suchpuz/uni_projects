@@ -1,0 +1,33 @@
+#include <ros/ros.h>
+#include <tf/transform_broadcaster.h>
+#include <nav_msgs/Odometry.h>
+
+
+/*initialize the variables*/
+static std::string topic = "/t265/odom"; //topic to subscribe
+
+void odom_callback(const nav_msgs::OdometryConstPtr& odom){   //recive in input the odometry message
+  /*initialize the broadcaster and 
+  the tranform object*/
+  static tf::TransformBroadcaster br;
+  tf::Transform tf;
+  geometry_msgs::Pose odom_pose = odom->pose.pose;   //extract the pose
+
+  tf::poseMsgToTF(odom_pose, tf);  //convert the pose into tf and store into tf variable
+
+  tf::StampedTransform stamped_tf(tf, odom->header.stamp, "odom", "base_link");  /*create an object
+  which represent a transformation between 2 frames in a certain timestamp*/
+
+  br.sendTransform(stamped_tf);  //send the information
+}
+
+int main(int argc, char **argv){
+
+  ros::init(argc, argv, "tf_publisher");
+  ros::NodeHandle nh;
+  ros::NodeHandle private_nh("~");
+  ros::Subscriber odom_sub = nh.subscribe(topic, 10, odom_callback);
+  ros::spin();
+
+  return 0;
+}
