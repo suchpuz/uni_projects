@@ -1,0 +1,146 @@
+#include <Wire.h>
+// distance sensor 
+const int trigPin = 9;
+const int echoPin = 10;
+
+//temperature sensor
+const byte Temp_meas_trigger = 0xF3;
+const byte Write = 0xE6; //command
+const byte Read  = 0xE7; // command
+const byte Soft_Reset = 0xFE; //command
+const byte Taddress = 0x40;  //indirizzo fisico x lettura
+const byte Taddress_write = 0x80; //x scrittura
+
+
+void setup() {
+  Serial.begin(9600); 
+  pinMode(trigPin, OUTPUT); 
+  pinMode(echoPin, INPUT); 
+  Wire.begin();  //initialize the library wire
+  reset(Taddress_write,Soft_Reset);
+}
+
+void loop() {
+ float dist = distanza();
+ Serial.print("distanza[mm]: ");
+ Serial.println(dist);
+ delay(100);
+  exit(0);
+
+}
+
+void reset(int Taddress, int Soft_reset){
+  Wire.beginTransmission(Taddress_write);
+  Wire.write(Soft_Reset);
+  Wire.endTransmission(true);
+  delay(500);
+}
+void read_resolution(int Taddress_write,int Read, int Taddress_read){
+Wire.beginTransmission(Taddress_write);
+Wire.write(Read);
+Wire.endTransmission(false);
+Wire.requestFrom(Taddress_read, 1);
+int  x = Wire.read();
+ Serial.println(x);
+ Wire.endTransmission(true);
+}
+
+float read_temp(int Taddress, int Temp_meas_trigger){
+  Wire.beginTransmission(Taddress);
+  Wire.write(Temp_meas_trigger);
+  Wire.endTransmission(false);
+  delay(100);
+    if (Wire.requestFrom(Taddress, 2)!= 2){
+      Serial.print("byte non disponibili");
+      return 0;
+    }
+  long V = Wire.read(); 
+  long V2 = Wire.read();
+  Wire.endTransmission(true);
+  long V3 = estrai_ultimi_2bit(V2);
+  V = (V<<8) | V3;        
+  float Temp = -46.85+175.72*V/pow(2,16);
+  //Serial.print(); 
+  return Temp;
+
+}
+
+long estrai_ultimi_2bit(long a){      //pone a 0 gli ultimi due bit 
+  long x = 0;
+  int k=7;
+  int vett[8];
+  int i = 0;
+
+  for(i=0; i<8; i++)  //inizializzo vettore a 0
+    vett[i] = 0;
+    
+  for(int i=0; i<8; i++){ //vettore in binario dell'intero a, ma al contrario
+    vett[i] = a%2;
+    a = a/2;
+  }
+
+  for(i=0, k=7; i<4; i++,k--){     //cambio ordine vettore
+    int aux = vett[i];
+    vett[i] = vett[k];
+    vett[k] = aux;
+  }
+  vett[6] = 0;
+  vett[7] = 0;    //ultime 2 cifre a 0 
+  for(i=0; i<8; i++){
+    x = x + vett[i] * potenza(2,7-i);   //valore intero con zero per le ultime 2 cifre binarie
+  }
+  
+  return x;
+}
+int potenza(int base, int esponente){
+   int i, result = 1;
+    for (i = 0; i < esponente; i++){
+        result *= base;
+    }
+        return result;
+  
+}
+
+float distanza(void){
+  float vel = vsuono();
+  Serial.print("vsuono[m/s] = ");
+  Serial.println(vel);
+  delay(100);
+  float duration = calcolo_tempo();
+  float distance = duration/2*vel* pow(10,-3);
+  //Serial.print("distanza float(mm): ");
+  //Serial.println(distance);
+  return distance;
+}
+
+float calcolo_tempo(){
+  long duration[10];
+  long somma = 0;
+  Serial.print("misure tempo[microsec]:\n");
+  for(int i=0; i<10; i++){
+    digitalWrite(trigPin, LOW);
+    delayMicroseconds(2);
+    digitalWrite(trigPin, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trigPin, LOW);
+    duration[i] = pulseIn(echoPin, HIGH); // Reads the echoPin, returns the sound wave travel time in microseconds
+    Serial.println(duration[i]);
+    delay(100);
+  }
+  for(int i=0; i<10; i++){
+    somma = somma + duration[i];
+  }
+  float durata_media = (float)somma/10;
+  Serial.print("durata media:\n");
+  Serial.println(durata_media);
+  delay(100);
+  return durata_media;
+}
+float vsuono(){
+  float temp = read_temp(Taddress, Temp_meas_trigger) + 273.15;
+  float vel = sqrt(401.8*temp);
+  Serial.print("temperatura[K]= ");
+  Serial.println(temp);
+  delay(100);
+  return vel;
+}
